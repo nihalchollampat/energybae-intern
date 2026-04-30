@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = 'https://energybae-intern.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://energybae-intern.onrender.com/api';
 
 // Simple SVG Icons
 const UploadIcon = () => (
