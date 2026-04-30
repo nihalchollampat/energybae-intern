@@ -13,6 +13,7 @@ Automated side-by-side analysis of electricity bills for solar sizing and ROI ca
 ## ✨ Features
 - **Dual Bill Processing**: Side-by-side extraction and comparison.
 - **AI + OCR**: Tesseract OCR combined with Llama 3.3 (Groq) for 12-month history extraction.
+- **Lead Management**: Automatically saves all extracted data to **Supabase** for future sales tracking.
 - **Pixel-Perfect Excel**: Generates a professional report with all formulas and Energybae branding.
 
 ## 📝 Submission Note

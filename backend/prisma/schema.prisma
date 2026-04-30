@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model BillAnalysis {
+  id                 Int      @id @default(autoincrement())
+  consumerName       String?
+  consumerNumber     String?
+  sanctionedLoad     Float?
+  fixedCharges       Float?
+  connectionType     String?
+  monthlyConsumption Json?
+  processedAt        DateTime @default(now())
+}

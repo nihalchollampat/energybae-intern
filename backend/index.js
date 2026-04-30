@@ -7,6 +7,7 @@ const fs = require('fs');
 const ExcelJS = require('exceljs');
 const Tesseract = require('tesseract.js');
 const Groq = require('groq-sdk');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -18,6 +19,11 @@ const upload = multer({ dest: 'uploads/' });
 
 const apiKey = process.env.GROQ_API_KEY;
 const groq = new Groq({ apiKey: apiKey || 'INVALID_KEY' });
+
+// Supabase Setup
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function extractDataWithGroq(filePath) {
     console.log(`Starting OCR for ${filePath}...`);
@@ -67,6 +73,21 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
         for (let i = 0; i < req.files.length; i++) {
             const file = req.files[i];
             const data = await extractDataWithGroq(file.path);
+            
+            // Save to Supabase
+            const { error: sbError } = await supabase
+                .from('bill_analysis')
+                .insert([{
+                    consumer_name: data.consumerName,
+                    consumer_number: data.consumerNumber,
+                    sanctioned_load: data.sanctionedLoad,
+                    fixed_charges: data.fixedCharges,
+                    connection_type: data.connectionType,
+                    monthly_consumption: data.monthlyConsumption
+                }]);
+            
+            if (sbError) console.error('Supabase Save Error:', sbError);
+            
             extractedResults.push(data);
 
             // Mapping: Bill 1 -> Column D, Bill 2 -> Column H
@@ -119,5 +140,5 @@ app.get('/api/download/:filename', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Backend (Multi-Bill) running at http://localhost:${port}`);
+    console.log(`Backend (Supabase Mode) running at http://localhost:${port}`);
 });
