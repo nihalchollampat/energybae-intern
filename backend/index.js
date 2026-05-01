@@ -64,7 +64,7 @@ async function extractDataWithGroq(filePath) {
         } else {
             console.log(`[OCR] Starting Tesseract...`);
             const ocrTarget = fs.existsSync(processedPath) ? processedPath : filePath;
-            const { data } = await Tesseract.recognize(ocrTarget, 'eng', {
+            const { data } = await Tesseract.recognize(ocrTarget, 'eng+mar', {
                 logger: m => console.log(`[Tesseract] ${m.status}: ${Math.round(m.progress * 100)}%`)
             });
             text = data.text;
@@ -79,19 +79,22 @@ async function extractDataWithGroq(filePath) {
         console.log('[AI] Sending to Groq (Llama 3.3)...');
         const prompt = `
             You are a high-precision Data Entry Assistant. 
-            I will provide messy OCR text from an MSEDCL electricity bill.
+            I will provide OCR text from an MSEDCL electricity bill. The text contains a mix of English and Marathi.
             
             GOAL: Extract the consumer details and the 12-month Consumption History table.
             
             FIELDS TO IDENTIFY:
-            1. Consumer Name
-            2. Consumer Number (12 digits)
-            3. Fixed Charges
-            4. Sanctioned Load (kW)
-            5. Connection Type
+            1. Consumer Name: (Name of the person/company)
+            2. Consumer Number: (12 digits, often near 'ग्राहक क्रमांक')
+            3. Fixed Charges: (Look for 'स्थिर आकार' or 'Fixed Charges', typically a number like 115, 128, etc. If not found, use 0)
+            4. Sanctioned Load (kW): (Look for 'मंजूर भार'. e.g., '1.00 KW' or '3.30 KW'. Extract only the number as a float.)
+            5. Connection Type: (Look for 'दर संकेत', e.g., '90/LT I Res 1-Phase' -> '1-Phase')
             
-            TABLE DATA:
-            Reconstruct the 12-month "Consumption History" (Month, Units, Bill Amount).
+            TABLE DATA (Consumption History):
+            Reconstruct the 12-month consumption history from the right-side bar graph text.
+            The months are written in Marathi (e.g., डिसेंबर, नोव्हेंबर, ऑक्टोबर, सप्टेंबर, ऑगस्ट, जुलै, जून, मे, एप्रिल, मार्च, फेब्रुवारी, जानेवारी).
+            Map them to their English equivalents (Dec, Nov, Oct, Sep, Aug, Jul, Jun, May, Apr, Mar, Feb, Jan) along with the year.
+            Look for patterns like "डिसेंबर-2025 121", where 121 is the units consumed.
             
             OUTPUT: Return ONLY a valid JSON object:
             {
@@ -101,9 +104,10 @@ async function extractDataWithGroq(filePath) {
                 "sanctioned_load": number,
                 "connection_type": "string",
                 "monthly_units": [
-                    { "month": "string", "units": number, "amount": number }
+                    { "month": "string", "units": number, "amount": 0 }
                 ]
             }
+            Ensure the monthly_units array contains the exact extracted historical months from the graph. If the bill amount is not listed next to the units, just set "amount" to 0.
 
             OCR TEXT:
             ${text}
