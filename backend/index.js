@@ -117,32 +117,36 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
             throw new Error('Excel template not found.');
         }
 
+        // 1. Parallelize Extraction for speed
+        console.log(`[Process] Starting parallel extraction for ${req.files.length} bills...`);
+        const extractionPromises = req.files.map(async (file, i) => {
+            const data = await extractDataWithGroq(file.path);
+            return { file, data, i };
+        });
+        
+        const extractedResultsData = await Promise.all(extractionPromises);
+        const extractedResults = extractedResultsData.map(res => res.data);
+
+        // 2. Load Workbook while data is being prepared
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(templatePath);
         const sheet = workbook.getWorksheet(1);
 
-        const extractedResults = [];
+        const dbPromises = [];
 
-        for (let i = 0; i < req.files.length; i++) {
-            const file = req.files[i];
-            console.log(`[Process] Processing bill ${i + 1}`);
+        // 3. Process results sequentially for Excel (fast) and trigger DB inserts in background
+        for (const { file, data, i } of extractedResultsData) {
+            // Background Supabase Logging (Fire and forget locally, await at the end)
+            const dbPromise = supabase.from('bill_analysis').insert([{
+                consumer_name: data.name,
+                consumer_number: data.consumer_no,
+                sanctioned_load: parseFloat(data.sanctioned_load) || 0,
+                fixed_charges: parseFloat(data.fixed_charges) || 0,
+                connection_type: data.connection_type,
+                monthly_consumption: data.monthly_units
+            }]).catch(dbErr => console.warn('Database logging failed:', dbErr.message));
             
-            const data = await extractDataWithGroq(file.path);
-            extractedResults.push(data);
-
-            // Supabase Logging
-            try {
-                await supabase.from('bill_analysis').insert([{
-                    consumer_name: data.name,
-                    consumer_number: data.consumer_no,
-                    sanctioned_load: parseFloat(data.sanctioned_load) || 0,
-                    fixed_charges: parseFloat(data.fixed_charges) || 0,
-                    connection_type: data.connection_type,
-                    monthly_consumption: data.monthly_units
-                }]);
-            } catch (dbErr) {
-                console.warn('Database logging failed:', dbErr.message);
-            }
+            dbPromises.push(dbPromise);
 
             const colPrefix = i === 0 ? 'D' : 'H';
             const colMonth = i === 0 ? 'B' : 'G';
@@ -182,7 +186,12 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
 
         const outputFileName = `Energybae_Analysis_${Date.now()}.xlsx`;
         const outputPath = path.join(__dirname, 'uploads', outputFileName);
-        await workbook.xlsx.writeFile(outputPath);
+        
+        // Wait for DB and Excel save concurrently
+        await Promise.all([
+            workbook.xlsx.writeFile(outputPath),
+            ...dbPromises
+        ]);
 
         res.json({ message: 'Success', data: extractedResults, downloadUrl: `/api/download/${outputFileName}` });
 
