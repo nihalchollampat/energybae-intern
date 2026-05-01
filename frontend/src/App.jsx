@@ -1,7 +1,10 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL || 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? 'http://localhost:5001/api' 
+    : 'https://energybae-intern.onrender.com/api');
 
 // Simple SVG Icons
 const UploadIcon = () => (
@@ -133,7 +136,7 @@ function App() {
 
               <div style={{ display: 'flex', gap: '16px' }}>
                 <a 
-                  href={`http://localhost:5001${result.downloadUrl}`}
+                  href={`${API_URL.replace('/api', '')}${result.downloadUrl}`}
                   className="btn-primary"
                   style={{ textDecoration: 'none' }}
                 >
