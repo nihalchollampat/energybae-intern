@@ -7,6 +7,7 @@ const fs = require('fs');
 const ExcelJS = require('exceljs');
 const Groq = require('groq-sdk');
 const Tesseract = require('tesseract.js');
+const pdfParse = require('pdf-parse');
 const sharp = require('sharp');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -54,13 +55,20 @@ async function extractDataWithGroq(filePath) {
                 .toFile(processedPath);
         }
 
-        console.log(`[OCR] Starting Tesseract...`);
-        const ocrTarget = isPdf ? filePath : (fs.existsSync(processedPath) ? processedPath : filePath);
-        
-        // Use local traineddata if possible (Tesseract.js automatic lookup in CWD)
-        const { data: { text } } = await Tesseract.recognize(ocrTarget, 'eng', {
-            logger: m => console.log(`[Tesseract] ${m.status}: ${Math.round(m.progress * 100)}%`)
-        });
+        let text = '';
+        if (isPdf) {
+            console.log(`[OCR] Extracting text from PDF...`);
+            const dataBuffer = fs.readFileSync(filePath);
+            const pdfData = await pdfParse(dataBuffer);
+            text = pdfData.text;
+        } else {
+            console.log(`[OCR] Starting Tesseract...`);
+            const ocrTarget = fs.existsSync(processedPath) ? processedPath : filePath;
+            const { data } = await Tesseract.recognize(ocrTarget, 'eng', {
+                logger: m => console.log(`[Tesseract] ${m.status}: ${Math.round(m.progress * 100)}%`)
+            });
+            text = data.text;
+        }
         
         if (fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
         
@@ -166,7 +174,7 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
 
         for (const { file, data, i } of extractedResultsData) {
             const colPrefix = i === 0 ? 'D' : 'H';
-            const colMonth = i === 0 ? 'B' : 'G';
+            const colMonth = i === 0 ? 'C' : 'G';
             
             sheet.getCell(`${colPrefix}1`).value = data.name;
             sheet.getCell(`${colPrefix}2`).value = data.consumer_no;
@@ -194,10 +202,13 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
 
         // Cleanup for single file uploads
         if (req.files.length === 1) {
-            for (let r = 1; r <= 5; r++) sheet.getCell(`H${r}`).value = null;
+            for (let r = 1; r <= 7; r++) sheet.getCell(`H${r}`).value = null;
             ['G','H','I','J'].forEach(c => sheet.getCell(`${c}8`).value = null);
-            for (let r = 9; r <= 20; r++) {
-                ['G','H','I','J'].forEach(c => sheet.getCell(`${c}${r}`).value = null);
+            for (let r = 9; r <= 30; r++) {
+                ['G','H','I','J'].forEach(c => {
+                    const cell = sheet.getCell(`${c}${r}`);
+                    if (cell) cell.value = null;
+                });
             }
         }
 

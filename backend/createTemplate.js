@@ -25,6 +25,7 @@ async function createTemplate() {
         if (options.numFmt) cell.numFmt = options.numFmt;
     };
 
+    sheet.getColumn('A').width = 5;
     sheet.getColumn('B').width = 25;
     sheet.getColumn('C').width = 15;
     sheet.getColumn('D').width = 15;
@@ -35,7 +36,16 @@ async function createTemplate() {
     sheet.getColumn('I').width = 15;
     sheet.getColumn('J').width = 15;
 
-    const labels = ['Consumer Name', 'Consumer No', 'Fixed Charges', 'Sanct. Load (kW)', 'Connection Type'];
+    const labels = [
+        'Consumer Name',
+        'Consumer No',
+        'Fixed Charges',
+        'Sanct. Load (kW)',
+        'Connection Type',
+        'Contract Demand (KVA) :',
+        'Solar Pannel used'
+    ];
+    
     labels.forEach((label, i) => {
         const row = i + 1;
         styleCell(sheet.getCell(`B${row}`), { bold: true, fill: COLORS.LABEL_BG });
@@ -44,32 +54,9 @@ async function createTemplate() {
         styleCell(sheet.getCell(`H${row}`), { align: 'center' });
     });
 
-    const tableHeaders = ['Sr.No', 'Month', 'Units', 'Bill Amount', 'Unit Cost', 'Month', 'Units', 'Bill Amount', 'Unit Cost'];
-    tableHeaders.forEach((header, i) => {
-        const cell = sheet.getCell(8, i + 1); // Starting at A? No, subagent said Sr No is in Column A? 
-        // Wait, subagent said A is Sr No.
-        // Let's check subagent report: "Column A contains the Serial Numbers (Sr.No)."
-        // "Units (Critical) D9:D20"
-        // "Month Name B9:B20" (Consumer 1)
-        // "Month Name G9:G20" (Consumer 2)
-        
-        // This means:
-        // A: Sr No
-        // B: Month 1
-        // C: ? (Maybe Sr No for consumer 1?)
-        // D: Units 1
-        // E: Amount 1
-        // F: Cost 1
-        // G: Month 2
-        // H: Units 2
-        // I: Amount 2
-        // J: Cost 2
-    });
-
-    // Let's use the subagent's exact mapping for the table:
     const headerMapping = [
-        { col: 'A', val: 'Sr.No' },
-        { col: 'B', val: 'Month' },
+        { col: 'B', val: 'Sr.No' },
+        { col: 'C', val: 'Month' },
         { col: 'D', val: 'Units' },
         { col: 'E', val: 'Bill Amount' },
         { col: 'F', val: 'Unit Cost' },
@@ -87,9 +74,9 @@ async function createTemplate() {
 
     for (let i = 0; i < 12; i++) {
         const row = 9 + i;
-        styleCell(sheet.getCell(`A${row}`), { align: 'center' });
-        sheet.getCell(`A${row}`).value = i + 1;
-        ['B','D','E','F','G','H','I','J'].forEach(col => styleCell(sheet.getCell(`${col}${row}`), { align: 'center' }));
+        styleCell(sheet.getCell(`B${row}`), { align: 'center' });
+        sheet.getCell(`B${row}`).value = i + 1; // 1 to 12
+        ['C','D','E','F','G','H','I','J'].forEach(col => styleCell(sheet.getCell(`${col}${row}`), { align: 'center' }));
     }
 
     const results = [
