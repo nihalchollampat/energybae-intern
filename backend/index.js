@@ -16,6 +16,11 @@ const port = process.env.PORT || 5001;
 app.use(cors());
 app.use(express.json());
 
+// Ensure uploads directory exists (crucial for Render deployments!)
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 const upload = multer({ dest: 'uploads/' });
 
 // Groq Setup
