@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 
+let API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
     ? 'http://localhost:5001/api' 
     : 'https://energybae-intern.onrender.com/api');
+
+// Ensure API_URL ends with /api (normalized)
+if (API_URL.endsWith('/')) API_URL = API_URL.slice(0, -1);
+if (!API_URL.endsWith('/api')) API_URL += '/api';
 
 // Simple SVG Icons
 const UploadIcon = () => (
