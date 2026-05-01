@@ -30,6 +30,11 @@ app.get('/', (req, res) => {
     res.send('Energybae Solar Data Feeder is Live! ☀️🔋');
 });
 
+// Health check endpoint for deployment platforms (like Render)
+app.head('/', (req, res) => {
+    res.sendStatus(200);
+});
+
 async function extractDataWithGroq(filePath) {
     try {
         console.log(`[OCR] Preprocessing: ${filePath}`);
