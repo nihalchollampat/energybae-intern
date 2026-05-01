@@ -138,27 +138,33 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
         
         const extractedResults = extractedResultsData.map(res => res.data);
 
-        // 2. Load Workbook while data is being prepared
+        // --- 2. Save extracted data to Database First ---
+        console.log('[DB] Saving extracted data to Supabase database...');
+        for (const { data } of extractedResultsData) {
+            try {
+                const { error } = await supabase.from('bill_analysis').insert([{
+                    consumer_name: data.name,
+                    consumer_number: data.consumer_no,
+                    sanctioned_load: parseFloat(data.sanctioned_load) || 0,
+                    fixed_charges: parseFloat(data.fixed_charges) || 0,
+                    connection_type: data.connection_type,
+                    monthly_consumption: data.monthly_units
+                }]);
+                if (error) throw error;
+                console.log(`[DB] Successfully saved data for consumer: ${data.name || 'Unknown'}`);
+            } catch (dbErr) {
+                console.error(`[DB] Error saving data to Supabase:`, dbErr.message);
+                // If database save is critical, you could throw the error here to stop execution
+            }
+        }
+
+        // --- 3. Generate Excel File with the result ---
+        console.log('[Excel] Loading Excel template and generating report...');
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(templatePath);
         const sheet = workbook.getWorksheet(1);
 
-        const dbPromises = [];
-
-        // 3. Process results sequentially for Excel (fast) and trigger DB inserts in background
         for (const { file, data, i } of extractedResultsData) {
-            // Background Supabase Logging (Fire and forget locally, await at the end)
-            const dbPromise = supabase.from('bill_analysis').insert([{
-                consumer_name: data.name,
-                consumer_number: data.consumer_no,
-                sanctioned_load: parseFloat(data.sanctioned_load) || 0,
-                fixed_charges: parseFloat(data.fixed_charges) || 0,
-                connection_type: data.connection_type,
-                monthly_consumption: data.monthly_units
-            }]).catch(dbErr => console.warn('Database logging failed:', dbErr.message));
-            
-            dbPromises.push(dbPromise);
-
             const colPrefix = i === 0 ? 'D' : 'H';
             const colMonth = i === 0 ? 'B' : 'G';
             
@@ -198,11 +204,8 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
         const outputFileName = `Energybae_Analysis_${Date.now()}.xlsx`;
         const outputPath = path.join(__dirname, 'uploads', outputFileName);
         
-        // Wait for DB and Excel save concurrently
-        await Promise.all([
-            workbook.xlsx.writeFile(outputPath),
-            ...dbPromises
-        ]);
+        await workbook.xlsx.writeFile(outputPath);
+        console.log(`[Excel] Report saved successfully at ${outputPath}`);
 
         res.json({ message: 'Success', data: extractedResults, downloadUrl: `/api/download/${outputFileName}` });
 
