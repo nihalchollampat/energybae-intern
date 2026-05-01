@@ -5,10 +5,8 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
-const Tesseract = require('tesseract.js');
-const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
-const sharp = require('sharp');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -18,9 +16,8 @@ app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
 
-// Groq Setup (Llama 3.3 for intelligent cleaning)
-const apiKey = process.env.GROQ_API_KEY;
-const groq = new Groq({ apiKey: apiKey || 'INVALID_KEY' });
+// Gemini Setup
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Supabase Setup
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -31,43 +28,35 @@ app.get('/', (req, res) => {
     res.send('Energybae Solar Data Feeder is Live! ☀️🔋');
 });
 
-async function extractDataWithGroq(filePath) {
-    console.log(`Step 1: Preprocessing Image ${filePath}...`);
-    const processedPath = filePath + '_processed.jpg';
-    
-    // Grayscale, Normalize, and Sharpen for better OCR
-    await sharp(filePath)
-        .grayscale()
-        .normalize()
-        .sharpen()
-        .toFile(processedPath);
+async function extractDataWithGemini(filePath) {
+    console.log(`Step 1: Processing file with Gemini 1.5 Flash...`);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    console.log(`Step 2: OCR Extraction...`);
-    const { data: { text } } = await Tesseract.recognize(processedPath, 'eng');
-    
-    // Cleanup processed file
-    if (fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
-    
-    console.log('Step 3: Intelligent Data Cleaning with Llama 3.3...');
+    const fileBuffer = fs.readFileSync(filePath);
+    // Basic MIME type detection
+    let mimeType = 'image/jpeg';
+    if (filePath.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf';
+    else if (filePath.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+
     const prompt = `
         You are a high-precision Data Entry Assistant for an Energy Solar company.
-        I will provide you with messy OCR text from an MSEDCL electricity bill.
+        Extract the consumer details and the 12-month Consumption History table from this MSEDCL bill.
         
-        GOAL: Reconstruct the consumer details and the 12-month Consumption History table.
+        GOAL: Reconstruct the consumer details and the 12-month Consumption History table accurately.
         
-        IDENTIFY THESE FIELDS:
-        1. Consumer Name: (Look for "Name of Consumer" or similar)
-        2. Consumer Number: (12 digits, look for "Consumer No.")
-        3. Fixed Charges: (Look for "Fixed Charges" in the bill summary)
-        4. Sanctioned Load: (Look for "Sanctioned Load" or "Connected Load" in kW)
-        5. Connection Type: (Look for "Connection Type" or "Tariff Category")
+        FIELDS TO EXTRACT:
+        1. Consumer Name: (Full name mentioned in the bill)
+        2. Consumer Number: (12-digit unique number)
+        3. Fixed Charges: (Amount in Rupees)
+        4. Sanctioned Load: (Load in kW)
+        5. Connection Type: (Tariff/Connection category)
         
-        TABLE EXTRACTION (CRITICAL):
-        Find the table titled "Consumption History" or "Last 12 Months Consumption".
-        It usually has columns like: Month | Units | Bill Amount.
-        Reconstruct all 12 rows. If a value is missing, use null.
+        TABLE EXTRACTION:
+        Find the "Consumption History" table (usually last 12 months).
+        Columns: Month, Units, Bill Amount.
+        Reconstruct all 12 rows. Use null for missing values.
         
-        OUTPUT: Return ONLY a valid JSON object:
+        OUTPUT: Return ONLY a valid JSON object (no markdown, no preamble):
         {
             "name": "string",
             "consumer_no": "string",
@@ -78,18 +67,24 @@ async function extractDataWithGroq(filePath) {
                 { "month": "string", "units": number, "amount": number }
             ]
         }
-
-        OCR TEXT:
-        ${text}
     `;
 
-    const chatCompletion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.3-70b-versatile',
-        response_format: { type: 'json_object' }
-    });
+    const result = await model.generateContent([
+        {
+            inlineData: {
+                data: fileBuffer.toString("base64"),
+                mimeType: mimeType
+            }
+        },
+        prompt
+    ]);
 
-    return JSON.parse(chatCompletion.choices[0].message.content);
+    const response = await result.response;
+    const text = response.text();
+    
+    // Clean up the response in case Gemini adds markdown code blocks
+    const cleanedText = text.replace(/```json|```/g, '').trim();
+    return JSON.parse(cleanedText);
 }
 
 app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
@@ -107,7 +102,7 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
 
         for (let i = 0; i < req.files.length; i++) {
             const file = req.files[i];
-            const data = await extractDataWithGroq(file.path);
+            const data = await extractDataWithGemini(file.path);
             extractedResults.push(data);
 
             // Lead Management

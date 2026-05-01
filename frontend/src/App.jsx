@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://energybae-intern.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 // Simple SVG Icons
 const UploadIcon = () => (
@@ -55,7 +55,8 @@ function App() {
       });
       setResult(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to process the bill. Please check your backend and Gemini API key.');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to process the bill. Please check your backend and Gemini API key.';
+      setError(errorMessage);
       console.error(err);
     } finally {
       setLoading(false);
@@ -149,12 +150,11 @@ function App() {
           )}
         </div>
 
-        {/* Feature List */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
           <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '12px' }}>⚡</div>
             <h4 style={{ marginBottom: '8px' }}>AI Extraction</h4>
-            <p style={{ fontSize: '0.85rem', color: '#666' }}>Powered by Groq Llama 3.3 for 99% accuracy on MSEDCL bills.</p>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>Powered by Gemini 1.5 Flash for 99% accuracy on MSEDCL bills.</p>
           </div>
           <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '12px' }}>📊</div>
