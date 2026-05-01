@@ -122,14 +122,15 @@ app.post('/api/upload', upload.array('bills', 2), async (req, res) => {
             throw new Error('Excel template not found.');
         }
 
-        // 1. Parallelize Extraction for speed
-        console.log(`[Process] Starting parallel extraction for ${req.files.length} bills...`);
-        const extractionPromises = req.files.map(async (file, i) => {
+        // Process sequentially to save memory on free tiers (prevents 502 OOM crashes)
+        const extractedResultsData = [];
+        for (let i = 0; i < req.files.length; i++) {
+            const file = req.files[i];
+            console.log(`[Process] Starting extraction for bill ${i + 1}/${req.files.length}...`);
             const data = await extractDataWithGroq(file.path);
-            return { file, data, i };
-        });
+            extractedResultsData.push({ file, data, i });
+        }
         
-        const extractedResultsData = await Promise.all(extractionPromises);
         const extractedResults = extractedResultsData.map(res => res.data);
 
         // 2. Load Workbook while data is being prepared
